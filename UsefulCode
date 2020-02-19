@@ -4,3 +4,417 @@ author: "Jonathan Slaney"
 date: "19/02/2020"
 output: html_document
 ---
+### Write a file
+
+```{r}
+write.csv(filename, file = "/Users/jslaney/filename.csv")
+```
+
+### Read in and combine (bind) dataframes
+
+```{r}
+setwd("C:/Users/jslan/Desktop/veritas.w2")
+w2new <- read.csv("health_2vicnew_main_bfd440e.csv")
+w2ret <- read.csv("health_2vic_main_bfd440e.csv")
+w1 <- read.csv("health_1vic_main_bfd440e.csv")
+#add wav
+
+d <- bind_rows(w2new, w2ret, w1)
+
+## Another example
+merged_data <- bind_rows(p1, p2)
+view(merged_data)
+summary(merged_data)
+
+## Read in and rename Cols
+
+p1_hip <- read.csv("/users/jslaney/desktop/graduate_studies/hkr6130/accelerometer/p1_right hip.csv", header = FALSE, skip = 100, col.names = c("time", "x_axis", "y_axis", "z_axis", "lux", "button", "temp"))
+
+head(p1_hip)
+```
+
+### Use purrr:map to read in all csv's in a folder
+
+```{r}
+library(readr)
+awfiles_df <- NULL
+awfiles <- list.files(path = "C:/Users/jslan/Desktop/aw_data_folder", pattern = "*.csv", full.names= T)
+
+awfiles %>%
+    purrr::map(function(i){
+      ndf <- read.csv(i, header = TRUE) 
+      awfiles_df <<- bind_rows(awfiles_df, ndf)
+    })
+
+summary(awfiles_df)
+
+## Compute mean and sum data for each participant (group_by(Username))
+summary_table <- awfiles_df %>%
+                  group_by(Username) %>% 
+                    summarize(
+                      heart_mean = mean(Heart, na.rm = TRUE),
+                      calories_summ = sum(Calories, na.rm = TRUE),
+                      steps_summ = sum(Steps, na.rm = TRUE), 
+                      distance_sum = sum(Distance, na.rm = TRUE)
+                    )
+summary_table
+```
+
+### Basic 2 variable plot
+
+```{r}
+scatter <- ggplot(cchs, aes(x = hwtghtm, y = hwtgwtk)) + 
+            geom_point() + 
+              xlab("Height in Meters") + 
+              ylab("Weight in Kilograms")
+plot(scatter)
+```
+
+### Facet wrap layer for ggplot of continous variables
+
+```{r}
+ab <- ggplot(d, aes(x = d$transp_bikes_adults)) + 
+  geom_histogram(binwidth = 1, fill="#76D24A", na.rm = TRUE) + 
+  xlab("Number of bicycles for adults") + 
+  scale_x_continuous(breaks = c(5, 10, 15, 20)) 
+
+ab + facet_wrap(vars(wave_id))
+  
+summary(d$transp_bikes_adults)
+```
+
+### Mutate a column into specific categories
+
+```{r}
+# Calculate BMI and store in new var
+cchs <- cchs %>%
+  mutate(weight = ifelse(hwtgwtk == 999.96 | hwtgwtk == 999.99, NA, hwtgwtk),
+         bmi = weight/height^2)
+
+# Categorize new var contents
+cchs <- cchs %>%
+          mutate(bmi_category = case_when(
+            bmi < 18.5 ~ "underweight",
+            bmi >=30 & bmi <999 ~ "obese",
+            bmi >=25 & bmi <30 ~ "overweight",
+            bmi >=18.5 & bmi <25 ~ "normal weight",
+            TRUE ~ "other")
+            )
+
+## Summarize the entire df
+summary(cchs)
+
+## Another example
+
+steps<-aw_data$steps
+
+aw_data <- aw_data %>%
+	mutate(steps_type = case_when(
+		steps == 0 ~ "No steps",
+		steps >=100 & steps <200 ~ "vigorous",
+		steps >=0 & steps <100 ~ "moderate",
+		TRUE ~ "other"
+	))
+  
+view(aw_data)
+```
+
+### Recode col contents names
+
+```{r}
+cchs <- cchs %>%
+	mutate(province = case_when(
+		geogprv == 10 ~ "NFLD & LAB",
+		geogprv == 11 ~ "PEI",
+		geogprv == 12 ~ "NOVA SCOTIA",
+		geogprv == 13 ~ "NEW BRUNSWICK",
+		geogprv == 24 ~ "QUEBEC",
+		geogprv == 35 ~ "ONTARIO",
+		geogprv == 46 ~ "MANITOBA",
+		geogprv == 47 ~ "SASKATCHEWAN",
+		geogprv == 48 ~ "ALBERTA",
+		geogprv == 59 ~ "BRITISH COLUMBIA",
+		geogprv == 60 ~ "YUKON/NWT/NUNA",
+		geogprv == 96 ~ "NOT APPLICABLE",
+		geogprv == 97 ~ "DON'T KNOW",
+		geogprv == 98 ~ "REFUSAL",
+		TRUE ~ "NOT STATED"
+	))
+```
+
+### Another ay to rename observations of a var
+
+```{r}
+d$bike_safety_f <- revalue(as.factor(d$bike_safety), c("1" = "Very safe", "2" = "Somewhat safe", "3" = "Neither safe nor unsafe", "4" = "Somewhat dangerous", "5" = "Very dangerous"))
+```
+
+### Create tables of one variable totals, grouped by another variable and diplayed side by side (facet_wrap)
+
+```{r}
+
+t_1 <- d %>%
+          group_by(wave_id, bike_safety_f) %>%
+            summarise(n = n()) %>%
+            mutate(pct = n / sum(n))
+
+kable(t_1)  %>%   kable_styling(bootstrap_options = "striped", full_width = T, position = "left")
+
+```
+
+### Create plot of one variable, grouped by another variable (ID) + facet_wrapped
+
+```{r}
+p <- ggplot(d, aes(bike_safety,  fill = bike_safety_f)) + theme(axis.text.x = element_text(angle=90, vjust = .6)) + 
+  geom_bar() +
+  scale_fill_manual(values = INTERACTPalette3) +
+  guides(fill=FALSE) +
+      ylab("Count") +
+      xlab("Perception of bicycle risk") +
+      ggtitle("Overall, how safe do you think cycling is in your city?") + 
+  facet_wrap(~ wave_id)
+plot(p)
+```
+
+### Remove unwanted values with DPLYR::mutate() 
+
+```{r}
+cchs <- cchs %>%
+  mutate(height = ifelse(hwtghtm == 9.996 | hwtghtm == 9.999, NA, hwtghtm))
+```
+
+### GROUP_BY() SUMMARIZE() <- get the mean and SD of BMI for each category in one code chunk. 
+
+```{r}
+bmi_prov <- cchs %>%
+  group_by(province) %>%
+    summarise(mean_BMI = mean(bmi, na.rm=TRUE),
+              sd_BMI = sd(bmi, na.rm=TRUE),
+              total = n())
+
+## Another example
+
+summary_table <- aw_data %>%
+                  group_by(steps_type) %>% 
+                  summarize(
+                  heart_mean = mean(heart_clean, na.rm = TRUE),
+                  calories_mean = mean(calories, na.rm = TRUE)
+                    )
+view(summary_table)
+```
+
+### How to Subset data
+
+```{r}
+newfoundland <- cchs %>%
+  filter(province == "NFLD & LAB")  
+
+sask <- cchs %>%
+  filter(province == "SASKATCHEWAN")
+
+# stack the data bind_rows()
+
+sask_nl <- bind_rows(sask, newfoundland)
+table(sask_nl$province)
+```
+
+### How to merge data
+
+```{r}
+### Select the first set of data
+first <- dataframe %>%
+  select(wave_id, bike_children)
+
+### Select the second set of data 
+second <- dataframe %>%
+  select(wave_id, bike_safety)
+
+### Join together
+
+join_full_data <- full_join(first, second, by="wave_id")
+head(join_full_data)
+```
+
+### Accel data - Aggregate accelerometer data by second and calculate the gravity subtracted vector magnitude, and the standard deviation for each axis (x, y, z,)
+
+```{r}
+accel_data$time1 <- str_sub(accel_data$time, 1, str_length(accel_data$time)-4) 
+  ### Removes all milliseconds
+
+accel_data$time2 <- ymd_hms(accel_data$time1)
+  ### Create a POSIXct formated variable
+
+accel_data$hour <- hour(accel_data$time2)
+  ### Create a hour variable
+
+accel_data$minute <- minute(accel_data$time2)
+  ### Create a minute variable
+
+accel_data$second <- second(accel_data$time2)
+  ### Create a second variable
+
+## Create Vector Magnitude variable
+vec_mag <- sqrt(accel_data$x_axis^2+accel_data$y_axis^2+accel_data$z_axis^2)
+
+## Gravity subtracted vector magnitude
+vec_mag_g <- abs(sqrt(accel_data$x_axis^2+accel_data$y_axis^2+accel_data$z_axis^2)-1)
+
+# AGGREGATE
+
+accel_sec <- accel_data %>%
+  group_by(id, wear_loc, hour, minute, second) %>%
+  summarise(
+         time = first(time),
+         m_x_axis = mean(x_axis),
+         m_y_axis = mean(y_axis),
+         m_z_axis = mean(z_axis),
+         vec_mag = mean(vec_mag),
+         vec_mag_g = first(vec_mag_g),
+         sd_x_axis = sd(x_axis),
+         sd_y_axis = sd(y_axis),
+         sd_z_axis = sd(z_axis)
+        )
+
+```
+
+## Accel data - Using Cut Points Create A New Variable Called Activity
+
+```{r}
+accel_sec <- accel_sec %>%
+  mutate(activity = case_when(
+    vec_mag_g <= 0.19000 ~ "Sedentary",
+    vec_mag_g >0.19001 & vec_mag_g <0.31400 ~ "Light",
+    vec_mag_g >=0.314001 &  vec_mag_g  <0.9989 ~ "Moderate",
+    vec_mag_g >0.999 ~ "Vigorous",
+    TRUE ~ "other"
+  ))
+
+# Create figure of physical activity
+
+fig1 <- ggplot(accel_sec, aes(x = time, y = vec_mag_g)) + 
+          geom_point(alpha = 1/10) + 
+            xlab("Time") +
+            ylab("Vector Magnitude")
+
+plot(fig1)
+```
+
+### Recode the datetime stamp with lubridate()
+
+```{r}
+library(lubridate)
+aw_data$date_time <- as_date(aw_data$date_time)
+aw_data$ymd <- ymd(aw_data$date_time)
+table(aw_data$ymd)
+```
+
+### Change 0's to NA's in a column
+
+```{r}
+heart_clean <- aw_data$heart %>%
+  na_if(0)
+```
+
+### Remove NA's and calculate mean HR
+
+```{r}
+heart_clean %>%
+  na_if(0)
+  mean(heart_clean,na.rm = TRUE)
+  summary(heart_clean)
+```
+
+### Select three variables, combine into a dataframe, plot them
+
+```{r}
+x<-aw_data$date_time
+y1<-aw_data$heart
+y2<-aw_data$steps
+df<-data.frame(x, y1, y2)
+ggplot(df, aes(x, y= value, color = variable)) +
+         geom_point(aes(y=y1, col = "y1")) +
+         geom_point(aes(y=y2, col = "y2"))
+```
+
+### Reading and plotting the generated data per each participant
+```{r warning=FALSE}
+for (i in 1:length(participants)) {
+  current_participant <- participants[i]
+  current_path <- paste(current_participant, "/", sep = "")
+
+  participants_data_files <- list.files(path = paste0(path, current_path), pattern = "*.csv$", full.names = F)
+  if (length(participants_data_files) == 0)
+    next()
+  # remove the file include all the others
+  participants_data_files <- participants_data_files[-which(grepl(participants_data_files, pattern =  "^.*fitbit.*$"))] 
+  
+  for (file_index in 1:length(participants_data_files)) {
+    
+    # read each .csv file
+    data <- fread(paste0(path, current_path, participants_data_files[file_index]), data.table = F)
+    # convert the DateTime type
+    data <- data %>% 
+      mutate(
+        DateTime = as_datetime(DateTime)
+      )
+    
+    data_plot <- ggplot(data, aes(x = DateTime)) +
+    geom_histogram() +
+    ggtitle(participants_data_files[file_index])
+    
+    plot(data_plot)
+    ggsave(paste0(path, current_path, participants_data_files[file_index], "_plot.pdf"))
+  }
+  
+}
+```
+
+### HEXOSKIN Loop over data, add new columns and retrieve info with str_sub()
+
+```{r}
+hexodata_temp <- NULL
+
+hexodata_temp <- dir(path = "/Users/dfuller/Desktop/DatasetsHexoskin/" , full.names = TRUE, pattern = "*.csv", recursive = TRUE) %>%
+   purrr::map(function(i){
+     dfhx <- read.csv(i, header = TRUE)
+     dfhx$city <- stringr::str_sub(i, 42, 45)
+     dfhx$participants <- stringr::str_sub(i, 59, 60)
+     hexodata_temp <- bind_rows(hexodata_temp, dfhx)
+   })
+
+hexo_data <- bind_rows(hexodata_temp)
+```
+
+### HEXOSKIN Change col names, create hexo_data and write to csv
+
+```{r}
+hexo_data <- hexo_data %>%
+  dplyr::rename(
+     time = time..s.256., 
+     respiratory_rate = breathing_rate..rpm...api.datatype.33.., 
+     heart_rate = heart_rate..bpm...api.datatype.19.., 
+     minute_ventilation_ml = minute_ventilation..mL.min...api.datatype.36.., 
+     cadence = cadence..spm...api.datatype.53.., 
+     activity_g = activity..g...api.datatype.49..,
+  )
+```
+
+### HEXOSKIN Delete useless columns
+
+```{r}
+hexo_data <- subset(hexo_data, select = -minute_ventilation..L.min...api.datatype.36..)
+hexo_data <- subset(hexo_data, select = -sleep_position..NA...api.datatype.270..)
+hexo_data <- subset(hexo_data, select = -X)
+hexo_data <- subset(hexo_data, select = -time)
+```
+
+### HEXOSKIN Add participant individual level data from separate participant file
+
+```{r}
+participants <- read_csv("Hexoskin_participants.csv")
+
+hexo_data_complete <- inner_join(hexo_data, participants, by = "participants")
+
+write.csv(hexo_data_complete, "hexo_data.csv") ## Saving do that I do not break my computer when working on this data! 
+```
+
+# STAT codes
